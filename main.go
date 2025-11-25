@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -113,19 +111,13 @@ func selectClip() {
 func main() {
 	// wl-copy, wl-paste, dmenu
 	checkRequiredPrograms()
-	// prevent same stuff being spammed to cm, 
-	lastClip := ""
-	// check wl-paste every one second
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	sigChan := make(chan os.Signal, 1)
-	// when receving signal from usr1, open clipboard menu :D
-	// kill -USR1 $(pgrep hauva)
-	// TODO: change it to daemon (systemd?)
-	signal.Notify(sigChan, syscall.SIGUSR1)
-	for {
-		select {
-		case <-ticker.C:
+	if len(os.Args) > 1 && os.Args[1] == "--daemon" {
+		// prevent same stuff being spammed to cm,
+		lastClip := ""
+		// check wl-paste every one second
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
 			clip, err := getClipboard()
 			if err != nil {
 				continue
@@ -134,10 +126,8 @@ func main() {
 				lastClip = clip
 				addClip()
 			}
-		case <-sigChan:
-			fmt.Println("signal received, opening menu")
-			selectClip()
 		}
+	} else {
+		selectClip()
 	}
 }
-

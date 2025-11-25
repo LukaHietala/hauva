@@ -1,0 +1,11 @@
+[Unit]
+Description=Hauva clipboard manager
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/local/bin/hauva --daemon
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target
