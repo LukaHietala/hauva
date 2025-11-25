@@ -88,32 +88,55 @@ func addClip() {
 func selectClip() {
 	cm := &ClipManager{}
 	cm.Load()
-	if len(cm.Clips) == 0 {
-		fmt.Println("no clips")
-		return
-	}
-	// replace \n with space in each clip for single line, since dmenu starts new option with \n
-	clips := make([]string, len(cm.Clips))
-	for i, clip := range cm.Clips {
-		clips[i] = strings.ReplaceAll(clip, "\n", " ")
-	}
-	// -i match insensitively, -l list vertically with number of lines, -p message/prompt
-	input := strings.Join(clips, "\n")
-	cmd := exec.Command("dmenu", "-i", "-l", "10", "-p", "Select clip:")
-	// pass stdin to dmenu to intrepret
-	cmd.Stdin = strings.NewReader(input)
-	// dmenu returns selected item as stdout
-	out, err := cmd.Output()
-	if err != nil {
-		fmt.Println("dmenu error:", err)
-		return
-	}
-	selectedClip := strings.TrimSpace(string(out))
-	// find the original clip with dmenu selected one
-	for i, clip := range clips {
-		if clip == selectedClip {
-			setClipboard(cm.Clips[i])
-			break
+	for {
+		if len(cm.Clips) == 0 {
+			fmt.Println("no clips")
+			return
+		}
+		// replace \n with space in each clip for single line, since dmenu starts new option with \n
+		clips := make([]string, len(cm.Clips))
+		for i, clip := range cm.Clips {
+			clips[i] = strings.ReplaceAll(clip, "\n", " ")
+		}
+		// add command option
+		options := append([]string{":"}, clips...)
+		input := strings.Join(options, "\n")
+		cmd := exec.Command("dmenu", "-i", "-l", "10", "-p", "Select clip:")
+		// pass stdin to dmenu to intrepret
+		cmd.Stdin = strings.NewReader(input)
+		// dmenu returns selected item as stdout
+		out, err := cmd.Output()
+		if err != nil {
+			fmt.Println("dmenu error:", err)
+			return
+		}
+		selectedClip := strings.TrimSpace(string(out))
+		// list commands if ":" is selected
+		if selectedClip == ":" {
+			// list commands
+			commands := []string{"clear"}
+			cmdInput := strings.Join(commands, "\n")
+			// cmdcmdcmdcmdcmdcmd
+			cmdCmd := exec.Command("dmenu", "-i", "-l", "10", "-p", "Commands:")
+			cmdCmd.Stdin = strings.NewReader(cmdInput)
+			cmdOut, cmdErr := cmdCmd.Output()
+			if cmdErr != nil {
+				continue
+			}
+			cmdSelected := strings.TrimSpace(string(cmdOut))
+			if cmdSelected == "clear" {
+				cm.Clips = []string{}
+				cm.Save()
+				continue
+			}
+		} else {
+			// find the original clip with dmenu selected one
+			for i, clip := range clips {
+				if clip == selectedClip {
+					setClipboard(cm.Clips[i])
+					return
+				}
+			}
 		}
 	}
 }
