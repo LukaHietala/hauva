@@ -92,9 +92,13 @@ func selectClip() {
 		fmt.Println("no clips")
 		return
 	}
-	// dmenu seperates options by \n so prepare the clips
+	// replace \n with space in each clip for single line, since dmenu starts new option with \n
+	clips := make([]string, len(cm.Clips))
+	for i, clip := range cm.Clips {
+		clips[i] = strings.ReplaceAll(clip, "\n", " ")
+	}
 	// -i match insensitively, -l list vertically with number of lines, -p message/prompt
-	input := strings.Join(cm.Clips, "\n")
+	input := strings.Join(clips, "\n")
 	cmd := exec.Command("dmenu", "-i", "-l", "10", "-p", "Select clip:")
 	// pass stdin to dmenu to intrepret
 	cmd.Stdin = strings.NewReader(input)
@@ -104,8 +108,14 @@ func selectClip() {
 		fmt.Println("dmenu error:", err)
 		return
 	}
-	selected := strings.TrimSpace(string(out))
-	setClipboard(selected)
+	selectedClip := strings.TrimSpace(string(out))
+	// find the original clip with dmenu selected one
+	for i, clip := range clips {
+		if clip == selectedClip {
+			setClipboard(cm.Clips[i])
+			break
+		}
+	}
 }
 
 func main() {
