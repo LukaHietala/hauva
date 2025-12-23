@@ -12,7 +12,7 @@ $(BUILD_DIR)/hauva: src/client.c src/hauva.h
 	$(CC) $(CFLAGS) -o $(BUILD_DIR)/hauva src/client.c
 
 $(BUILD_DIR)/hauvad: src/daemon.c src/hauva.h
-	$(CC) $(CFLAGS) -o $(BUILD_DIR)/hauvad src/daemon.c
+	$(CC) $(CFLAGS) -pthread -o $(BUILD_DIR)/hauvad src/daemon.c
 
 install:
 	sudo cp $(BUILD_DIR)/hauva $(BUILD_DIR)/hauvad /usr/local/bin/

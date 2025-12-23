@@ -29,4 +29,10 @@ struct clip_entry {
 	size_t length;
 };
 
+extern void add_entry(const char *data, size_t len);
+extern void load_history();
+extern void save_history();
+extern void get_cache_path();
+extern int connect_daemon();
+
 #endif /* HAUVA_H */

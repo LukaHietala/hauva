@@ -1,8 +1,21 @@
 #include "hauva.h"
+#include <pthread.h>
 
 struct clip_entry history[MAX_ENTRIES];
 int entry_count = 0;
 char cache_path[512];
+
+/*
+ * Monitor clipboard changes using wl-paste --watch
+ * Runs in a separate thread to avoid blocking the main daemon loop
+ */
+
+void *clipboard_monitor(void *arg)
+{
+	// Dogfooding
+	system("wl-paste --watch hauva add &");
+	return NULL;
+}
 
 /*
  * Get the path to history cache file (~/.cache/hauva_history)
@@ -72,22 +85,35 @@ void add_entry(const char *data, size_t len)
 	if (len == 0)
 		return;
 
-	// De-duplicate
-	if (entry_count > 0 && strcmp(history[0].content, data) == 0)
-		return;
-
-	if (entry_count == MAX_ENTRIES) {
-		free(history[MAX_ENTRIES - 1].content);
-		entry_count--;
+	int existing_index = -1;
+	for (int i = 0; i < entry_count; i++) {
+		if (strcmp(history[i].content, data) == 0) {
+			existing_index = i;
+			break;
+		}
 	}
 
-	// Shift entries down
-	for (int i = entry_count; i > 0; i--)
-		history[i] = history[i - 1];
+	if (existing_index == 0)
+		return;
 
-	history[0].content = strdup(data);
-	history[0].length = len;
-	entry_count++;
+	if (existing_index > 0) {
+		struct clip_entry temp = history[existing_index];
+		for (int i = existing_index; i > 0; i--)
+			history[i] = history[i - 1];
+		history[0] = temp;
+	} else {
+		if (entry_count == MAX_ENTRIES) {
+			free(history[MAX_ENTRIES - 1].content);
+			entry_count--;
+		}
+
+		for (int i = entry_count; i > 0; i--)
+			history[i] = history[i - 1];
+
+		history[0].content = strdup(data);
+		history[0].length = len;
+		entry_count++;
+	}
 	save_history();
 }
 
@@ -181,6 +207,16 @@ int main()
 {
 	get_cache_path();
 	load_history();
+
+	// Start clipboard monitor thread and detach it
+	pthread_t monitor_thread;
+	if (pthread_create(&monitor_thread, NULL, clipboard_monitor, NULL) !=
+	    0) {
+		fprintf(stderr, "Failed to create clipboard monitor thread");
+		return 1;
+	}
+	pthread_detach(monitor_thread);
+
 	unlink(SOCKET_PATH);
 
 	int server_fd = socket(AF_UNIX, SOCK_STREAM, 0);

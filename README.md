@@ -32,9 +32,11 @@ Start the daemon:
 ./build/hauvad &
 ```
 
+The hauva daemon maintains history and listens to clipboard
+
 Client commands:
-- `hauva add` — Add clipboard entry from stdin
-- `hauva list` — List entries (one per line, for menu pickers)
+- `hauva add` — Add clipboard entry from stdin (manual addition)
+- `hauva list` — List entries (one per line, for menu pickers)  
 - `hauva copy` — Copy selected entry (from stdin, e.g. wmenu output)
 
 Example:
@@ -44,7 +46,7 @@ hauva list | wmenu | hauva copy
 
 ### Systemd services
 
-Example user service files (edit paths as needed):
+Example user service file (edit paths as needed):
 
 `~/.config/systemd/user/hauva.service`
 ```ini
@@ -53,20 +55,6 @@ Description=Hauva daemon
 
 [Service]
 ExecStart=/usr/local/bin/hauvad
-Restart=always
-
-[Install]
-WantedBy=default.target
-```
-
-`~/.config/systemd/user/hauva-watcher.service`
-```ini
-[Unit]
-Description=Hauva clipboard watcher
-After=hauva.service
-
-[Service]
-ExecStart=/usr/bin/wl-paste --watch /usr/local/bin/hauva add
 Restart=always
 
 [Install]
