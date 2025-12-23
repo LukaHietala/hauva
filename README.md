@@ -39,11 +39,6 @@ Client commands:
 - `hauva list` — List entries (one per line, for menu pickers)  
 - `hauva copy` — Copy selected entry (from stdin, e.g. wmenu output)
 
-Example:
-```sh
-hauva list | wmenu | hauva copy
-```
-
 ### Systemd services
 
 Example user service file (edit paths as needed):
