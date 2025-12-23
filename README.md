@@ -1,28 +1,85 @@
 <img width="500" height="375" alt="image" src="https://github.com/user-attachments/assets/b9789ffa-75ed-406f-9205-0f5d068776b0" />
 
-# Hauva 
+## Hauva
 
-Simple clipboard manager for  wayland. Supports only text. Requires wl-clipboard and dmenu.
+Simple clipboard manager for Wayland
 
-## Setup
+### Features
 
-1. Clone the repo
-2. Build
-```bash
-go build -o hauva main.go
+- Text-only clipboard history (default 50 entries)
+- De-duplication and persistent history (`~/.cache/hauva_history`)
+- Fast IPC via Unix sockets (`/tmp/hauva.sock`)
+- Integrates with `wl-clipboard` and `wmenu` for selection and copy
+
+### Requirements
+
+- Wayland compositor
+- `wmenu` (entry selection)
+- `wl-clipboard` (`wl-copy`, `wl-paste`)
+- `gcc`, `make`
+
+### Build & Install
+
+```sh
+make
+make install
 ```
-3. Copy to /usr/local/bin
-```bash
-sudo cp hauva /usr/local/bin/
-```
-4. Add systemd service for daemon
-```bash
-mkdir -p ~/.config/systemd/user # or system wide
-cp hauva.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable hauva.service
-systemctl --user start hauva.service
-```
-5. Use command `hauva` to open clipboard menu
 
-You can now use it in a wm for example. `bindsym $mod+Shift+v exec hauva`
+### Usage
+
+Start the daemon:
+```sh
+./build/hauvad &
+```
+
+Client commands:
+- `hauva add` — Add clipboard entry from stdin
+- `hauva list` — List entries (one per line, for menu pickers)
+- `hauva copy` — Copy selected entry (from stdin, e.g. wmenu output)
+
+Example:
+```sh
+hauva list | wmenu | hauva copy
+```
+
+### Systemd services
+
+Example user service files (edit paths as needed):
+
+`~/.config/systemd/user/hauva.service`
+```ini
+[Unit]
+Description=Hauva daemon
+
+[Service]
+ExecStart=/usr/local/bin/hauvad
+Restart=always
+
+[Install]
+WantedBy=default.target
+```
+
+`~/.config/systemd/user/hauva-watcher.service`
+```ini
+[Unit]
+Description=Hauva clipboard watcher
+After=hauva.service
+
+[Service]
+ExecStart=/usr/bin/wl-paste --watch /usr/local/bin/hauva add
+Restart=always
+
+[Install]
+WantedBy=default.target
+```
+
+### Tips
+
+- Bind `hauva-ui` to some key on your wm
+- Use with dmenu or other menus by editing the hauva-ui.sh script
+
+### Future stuff
+
+- X11 support
+- Images and other MIME types
+- Qt/gtk app
