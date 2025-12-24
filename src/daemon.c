@@ -1,9 +1,11 @@
 #include "hauva.h"
 #include <pthread.h>
+#include <stdint.h>
 
 struct clip_entry history[MAX_ENTRIES];
 int entry_count = 0;
 char cache_path[512];
+pthread_mutex_t history_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /*
  * Monitor clipboard changes using wl-paste --watch
@@ -13,7 +15,8 @@ char cache_path[512];
 void *clipboard_monitor(void *arg)
 {
 	// Dogfooding
-	system("wl-paste --watch hauva add &");
+	// TODO: use wayland client api directly, very hacky for now
+	system("wl-paste --watch hauva add");
 	return NULL;
 }
 
@@ -33,7 +36,9 @@ void get_cache_path()
  */
 void save_history()
 {
-	FILE *f = fopen(cache_path, "w");
+	char temp_path[1024];
+	snprintf(temp_path, sizeof(temp_path), "%s.tmp", cache_path);
+	FILE *f = fopen(temp_path, "w");
 	if (!f)
 		return;
 	for (int i = 0; i < entry_count; i++) {
@@ -45,6 +50,7 @@ void save_history()
 		fputc('\n', f);
 	}
 	fclose(f);
+	rename(temp_path, cache_path);
 }
 
 /*
@@ -53,9 +59,12 @@ void save_history()
  */
 void load_history()
 {
+	pthread_mutex_lock(&history_mutex);
 	FILE *f = fopen(cache_path, "r");
-	if (!f)
+	if (!f) {
+		pthread_mutex_unlock(&history_mutex);
 		return;
+	}
 	char *line = NULL;
 	size_t len = 0;
 	while (getline(&line, &len, f) != -1 && entry_count < MAX_ENTRIES) {
@@ -74,6 +83,7 @@ void load_history()
 	}
 	free(line);
 	fclose(f);
+	pthread_mutex_unlock(&history_mutex);
 }
 
 /*
@@ -85,6 +95,7 @@ void add_entry(const char *data, size_t len)
 	if (len == 0)
 		return;
 
+	pthread_mutex_lock(&history_mutex);
 	int existing_index = -1;
 	for (int i = 0; i < entry_count; i++) {
 		if (strcmp(history[i].content, data) == 0) {
@@ -93,8 +104,10 @@ void add_entry(const char *data, size_t len)
 		}
 	}
 
-	if (existing_index == 0)
+	if (existing_index == 0) {
+		pthread_mutex_unlock(&history_mutex);
 		return;
+	}
 
 	if (existing_index > 0) {
 		struct clip_entry temp = history[existing_index];
@@ -115,6 +128,7 @@ void add_entry(const char *data, size_t len)
 		entry_count++;
 	}
 	save_history();
+	pthread_mutex_unlock(&history_mutex);
 }
 
 /*
@@ -125,6 +139,7 @@ void add_entry(const char *data, size_t len)
  */
 void send_list(int client_fd)
 {
+	pthread_mutex_lock(&history_mutex);
 	for (int i = 0; i < entry_count; i++) {
 		dprintf(client_fd, "%d: ", i);
 
@@ -144,6 +159,7 @@ void send_list(int client_fd)
 			write(client_fd, "...", 3);
 		write(client_fd, "\n", 1);
 	}
+	pthread_mutex_unlock(&history_mutex);
 }
 
 /*
@@ -156,13 +172,18 @@ void copy_entry_by_index(const char *input_line)
 	if (sscanf(input_line, "%d:", &index) != 1)
 		return;
 
+	pthread_mutex_lock(&history_mutex);
 	if (index >= 0 && index < entry_count) {
+		size_t length = history[index].length;
+		char *content = history[index].content;
+		pthread_mutex_unlock(&history_mutex);
 		FILE *pipe = popen("wl-copy", "w");
 		if (pipe) {
-			fwrite(history[index].content, 1, history[index].length,
-			       pipe);
+			fwrite(content, 1, length, pipe);
 			pclose(pipe);
 		}
+	} else {
+		pthread_mutex_unlock(&history_mutex);
 	}
 }
 
@@ -201,6 +222,18 @@ void handle_client(int client_fd)
 }
 
 /*
+ * Handle a connected client in a separate thread
+ * This fixes blocking issues when two instances connect at the same time
+ * (usually happens with bindings in wms)
+ */
+void *client_handler(void *arg)
+{
+	int client_fd = (int)(intptr_t)arg;
+	handle_client(client_fd);
+	return NULL;
+}
+
+/*
  * Hauva daemon, using unix domain sockets for IPC
  */
 int main()
@@ -224,12 +257,19 @@ int main()
 	strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path) - 1);
 
 	bind(server_fd, (struct sockaddr *)&addr, sizeof(addr));
-	listen(server_fd, 5);
+	listen(server_fd, 20);
 
 	while (1) {
 		int client_fd = accept(server_fd, NULL, NULL);
-		if (client_fd >= 0)
-			handle_client(client_fd);
+		if (client_fd >= 0) {
+			pthread_t thread;
+			if (pthread_create(&thread, NULL, client_handler,
+					   (void *)(intptr_t)client_fd) == 0) {
+				pthread_detach(thread);
+			} else {
+				close(client_fd);
+			}
+		}
 	}
 	return 0;
 }
